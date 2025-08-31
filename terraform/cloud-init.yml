@@ -1,0 +1,143 @@
+#cloud-config
+# Cloud-init configuration for SLA Dashboard automatic deployment
+
+# Update packages
+package_update: true
+package_upgrade: true
+
+# Install required packages
+packages:
+  - git
+  - curl
+  - wget
+  - htop
+  - unattended-upgrades
+  - fail2ban
+
+# Create users
+users:
+  - name: sladmin
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+# Configure automatic security updates
+write_files:
+  - path: /etc/apt/apt.conf.d/50unattended-upgrades
+    content: |
+      Unattended-Upgrade::Automatic-Reboot "false";
+      Unattended-Upgrade::Remove-Unused-Dependencies "true";
+      Unattended-Upgrade::Automatic-Reboot-Time "02:00";
+    permissions: '0644'
+  
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::Download-Upgradeable-Packages "1";
+      APT::Periodic::AutocleanInterval "7";
+    permissions: '0644'
+  
+  - path: /opt/deploy-sla-dashboard.sh
+    content: |
+      #!/bin/bash
+      set -e
+      
+      # Log deployment
+      exec > >(tee -a /var/log/sla-dashboard-deployment.log)
+      exec 2>&1
+      
+      echo "[$(date)] Starting SLA Dashboard deployment via cloud-init..."
+      
+      # Wait for system to be ready
+      sleep 30
+      
+      # Clone repository
+      cd /tmp
+      git clone https://github.com/BalrogEG/sla-dashboard.git
+      cd sla-dashboard
+      
+      # Make deployment script executable
+      chmod +x deploy.sh
+      
+      # Deploy with domain if provided
+      if [ -n "${domain_name}" ] && [ "${domain_name}" != "" ]; then
+        echo "[$(date)] Deploying with domain: ${domain_name}"
+        ./deploy.sh --domain "${domain_name}"
+      else
+        echo "[$(date)] Deploying without domain"
+        ./deploy.sh
+      fi
+      
+      # Cleanup
+      cd /
+      rm -rf /tmp/sla-dashboard
+      
+      echo "[$(date)] SLA Dashboard deployment completed successfully!"
+      
+      # Create completion marker
+      touch /opt/sla-dashboard-deployed
+      
+    permissions: '0755'
+
+# Configure firewall
+runcmd:
+  # Configure UFW firewall
+  - ufw --force enable
+  - ufw allow OpenSSH
+  - ufw allow 'Nginx Full'
+  
+  # Enable fail2ban
+  - systemctl enable fail2ban
+  - systemctl start fail2ban
+  
+  # Enable unattended upgrades
+  - systemctl enable unattended-upgrades
+  - systemctl start unattended-upgrades
+  
+  # Run SLA Dashboard deployment in background
+  - nohup /opt/deploy-sla-dashboard.sh > /var/log/sla-dashboard-deployment.log 2>&1 &
+
+# Configure SSH
+ssh_pwauth: false
+disable_root: false
+
+# Set timezone
+timezone: UTC
+
+# Configure locale
+locale: en_US.UTF-8
+
+# Reboot after setup (optional)
+# power_state:
+#   mode: reboot
+#   message: "Rebooting after cloud-init setup"
+#   timeout: 30
+#   condition: true
+
+# Final message
+final_message: |
+  SLA Dashboard cloud-init setup completed!
+  
+  The system has been configured with:
+  - Security updates enabled
+  - Firewall configured
+  - Fail2ban enabled
+  - SLA Dashboard deployment started in background
+  
+  Check deployment progress:
+  tail -f /var/log/sla-dashboard-deployment.log
+  
+  Once deployment is complete, access the dashboard at:
+  %{ if domain_name != "" }
+  https://${domain_name}
+  %{ else }
+  http://YOUR_DROPLET_IP
+  %{ endif }
+  
+  SSH access:
+  ssh root@YOUR_DROPLET_IP
+  ssh sladmin@YOUR_DROPLET_IP
+

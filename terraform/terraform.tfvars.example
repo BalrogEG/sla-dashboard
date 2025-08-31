@@ -1,0 +1,33 @@
+# DigitalOcean Terraform Variables Example
+# Copy this file to terraform.tfvars and update with your values
+
+# DigitalOcean API token (required)
+# Get from: https://cloud.digitalocean.com/account/api/tokens
+do_token = "dop_v1_your_digitalocean_api_token_here"
+
+# SSH public key content (required)
+# Generate with: ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+# Then copy content of ~/.ssh/id_rsa.pub
+ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC... your_email@example.com"
+
+# SSH key name in DigitalOcean
+ssh_key_name = "sla-dashboard-key"
+
+# Domain name (optional)
+# If provided, SSL certificate will be automatically configured
+domain_name = "sla.yourdomain.com"
+
+# Environment (dev, staging, prod)
+environment = "prod"
+
+# DigitalOcean region
+# Available regions: nyc1, nyc3, ams3, sfo3, sgp1, lon1, fra1, tor1, blr1, syd1
+region = "nyc3"
+
+# Droplet size
+# Available sizes:
+# - s-1vcpu-1gb ($6/month) - Minimum for development
+# - s-2vcpu-2gb ($12/month) - Recommended for small production
+# - s-4vcpu-8gb ($48/month) - Recommended for high traffic
+droplet_size = "s-2vcpu-2gb"
+
