@@ -88,18 +88,70 @@ update_system() {
 install_python() {
     log "Checking Python installation..."
     
+    # Check if Python 3.11 is available
     if command -v python3.11 &> /dev/null; then
         log "Python 3.11 already installed"
-    else
-        warning "Python 3.11 not found, installing..."
+        return 0
+    fi
+    
+    # Check if system Python is 3.11 or newer
+    PYTHON_VERSION=$(python3 --version 2>&1 | grep -oP '\d+\.\d+' | head -1)
+    if [[ $(echo "$PYTHON_VERSION >= 3.11" | bc -l) -eq 1 ]]; then
+        log "System Python $PYTHON_VERSION is compatible (>= 3.11)"
+        # Create symlink for compatibility
+        ln -sf $(which python3) /usr/local/bin/python3.11 2>/dev/null || true
+        return 0
+    fi
+    
+    warning "Python 3.11 not found, installing..."
+    
+    if [[ "$OS" == *"Ubuntu"* ]]; then
+        # Check Ubuntu version
+        UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "0")
         
-        if [[ "$OS" == *"Ubuntu"* ]]; then
+        if [[ $(echo "$UBUNTU_VERSION >= 24.04" | bc -l) -eq 1 ]]; then
+            # For Ubuntu 24.04+, try to install from official repos first
+            log "Attempting to install Python 3.11 from official repositories..."
+            apt update
+            if apt install -y python3.11 python3.11-venv python3.11-dev 2>/dev/null; then
+                log "Python 3.11 installed from official repositories"
+            else
+                # Fallback to deadsnakes PPA for older Ubuntu versions
+                log "Official repos don't have Python 3.11, trying deadsnakes PPA..."
+                if add-apt-repository ppa:deadsnakes/ppa -y 2>/dev/null; then
+                    apt update
+                    apt install -y python3.11 python3.11-venv python3.11-dev
+                else
+                    warning "deadsnakes PPA not available for this Ubuntu version"
+                    # Use system Python if it's reasonably recent
+                    if [[ $(echo "$PYTHON_VERSION >= 3.9" | bc -l) -eq 1 ]]; then
+                        log "Using system Python $PYTHON_VERSION as fallback"
+                        ln -sf $(which python3) /usr/local/bin/python3.11
+                        # Install venv if not available
+                        apt install -y python3-venv python3-dev
+                    else
+                        error "Cannot install Python 3.11 and system Python $PYTHON_VERSION is too old"
+                    fi
+                fi
+            fi
+        else
+            # For older Ubuntu versions, use deadsnakes PPA
             add-apt-repository ppa:deadsnakes/ppa -y
             apt update
             apt install -y python3.11 python3.11-venv python3.11-dev
+        fi
+    elif [[ "$OS" == *"CentOS"* ]] || [[ "$OS" == *"Red Hat"* ]] || [[ "$OS" == *"Rocky"* ]]; then
+        # For RHEL-based systems
+        yum install -y python3.11 python3.11-devel python3.11-pip
+    else
+        warning "Unsupported distribution for automatic Python 3.11 installation"
+        log "Please install Python 3.11 manually for your distribution"
+        # Try to use system Python if available
+        if [[ $(echo "$PYTHON_VERSION >= 3.9" | bc -l) -eq 1 ]]; then
+            log "Using system Python $PYTHON_VERSION as fallback"
+            ln -sf $(which python3) /usr/local/bin/python3.11
         else
-            # For other distributions, compile from source or use available packages
-            warning "Please install Python 3.11 manually for your distribution"
+            error "System Python $PYTHON_VERSION is too old. Please install Python 3.11+ manually"
         fi
     fi
 }
