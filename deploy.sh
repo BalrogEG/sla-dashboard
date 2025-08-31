@@ -316,8 +316,14 @@ server {
     gzip on;
     gzip_vary on;
     gzip_min_length 1024;
-    gzip_proxied expired no-cache no-store private must-revalidate auth;
-    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/javascript;
+    gzip_types
+        text/plain
+        text/css
+        text/xml
+        text/javascript
+        application/javascript
+        application/xml+rss
+        application/json;
     
     # Static files
     location /static/ {
@@ -326,8 +332,18 @@ server {
         add_header Cache-Control "public, immutable";
     }
     
-    # Application
-    location / {
+    # Health check
+    location /health {
+        access_log off;
+        proxy_pass http://127.0.0.1:$PORT/api/dashboard/health;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+    
+    # API endpoints
+    location /api/ {
         proxy_pass http://127.0.0.1:$PORT;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -338,10 +354,21 @@ server {
         proxy_read_timeout 60s;
     }
     
-    # Health check
-    location /health {
-        access_log off;
-        proxy_pass http://127.0.0.1:$PORT/api/dashboard/health;
+    # Main application
+    location / {
+        proxy_pass http://127.0.0.1:$PORT;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        
+        # Cache control for dynamic content
+        add_header Cache-Control "no-cache, no-store";
+        add_header Pragma "no-cache";
+        add_header Expires "0";
     }
 }
 EOF
